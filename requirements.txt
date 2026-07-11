@@ -4,3 +4,5 @@ spotipy
 numpy
 openai
 tenacity
+stripe
+psycopg2-binary
