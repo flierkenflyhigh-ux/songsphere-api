@@ -1,5 +1,8 @@
 import os
 import json
+import stripe
+import psycopg2
+from psycopg2.extras import RealDictCursor
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -7,11 +10,10 @@ import spotipy
 from spotipy.oauth2 import SpotifyClientCredentials
 import numpy as np
 from openai import AsyncOpenAI
-from tenacity import retry, stop_after_attempt, wait_exponential
 
-app = FastAPI(title="Songspere API")
+app = FastAPI(title="Songsphere API")
 
-# CORS設定
+# CORS設定（Vercelからの通信を許可）
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -20,33 +22,63 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# APIクライアント初期化
+# 各種APIクライアント初期化
+stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
 sp = spotipy.Spotify(auth_manager=SpotifyClientCredentials(
     client_id=os.getenv("SPOTIFY_CLIENT_ID"), 
     client_secret=os.getenv("SPOTIFY_CLIENT_SECRET")
 ))
 openai_client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
+# 定数：Stripe Price IDs
+ENTRY_PRICE_ID = "price_1Tru7RADyXuVm0kwpwOnza38"
+PRO_PRICE_ID = "price_1Tru7RADyXuVm0kwqSpqsfPs"
+
+# データベース接続関数
+def get_db_connection():
+    return psycopg2.connect(os.getenv("DATABASE_URL"))
+
+# サーバー起動時の初期化処理（DBテーブルの自動生成）
+@app.on_event("startup")
+def startup_event():
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS spheres (
+            id SERIAL PRIMARY KEY,
+            track_id VARCHAR(255) UNIQUE,
+            track_name VARCHAR(255),
+            artist_name VARCHAR(255),
+            features JSONB,
+            ai_insights JSONB,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    # ※ここに50曲の初期シードデータ投入ロジックを後続で追加します
+    conn.commit()
+    cur.close()
+    conn.close()
+
+# リクエストモデル
 class GenerateRequest(BaseModel):
     spotify_track_id: str
     lyrics_key_phrase: str = ""
 
+class UpgradeRequest(BaseModel):
+    subscription_id: str
+
 @app.get("/")
 def read_root():
-    return {"status": "Songspere API is running"}
+    return {"status": "Songsphere API is running with DB and Stripe"}
 
+# スフィア生成API
 @app.post("/api/generate")
 async def generate_sphere(request: GenerateRequest):
     try:
-        # 1. Spotifyデータ取得と独自パラメータ計算
         track = sp.track(request.spotify_track_id)
         features = sp.audio_features(request.spotify_track_id)[0]
-        analysis = sp.audio_analysis(request.spotify_track_id)
         
         friction = features['energy'] * (1 - features['danceability']) * 100
-        contrast = (1 - features['instrumentalness']) * 100
-        loudness_array = np.array([seg['loudness'] for seg in analysis['segments']])
-        dynamic_shift = min(np.std(loudness_array) * 5, 100.0)
         organic_index = ((features['acousticness'] + features['speechiness']) / 2) * 100
 
         track_data = {
@@ -54,12 +86,9 @@ async def generate_sphere(request: GenerateRequest):
             "artist": track['artists'][0]['name'],
             "BPM": round(features['tempo']),
             "Rhythmic_Friction": round(friction),
-            "Instrument_Role_Contrast": round(contrast),
-            "Dynamic_Shift": round(dynamic_shift),
             "Vocal_Organic_Index": round(organic_index)
         }
 
-        # 2. OpenAIによるインサイトと画像プロンプト生成
         prompt = f"Analyze this song data and generate 3 short insights in Japanese, and an image generation prompt in English for a 'material sphere' representing the song.\nData: {json.dumps(track_data)}\nLyrics focus: {request.lyrics_key_phrase}"
         
         response = await openai_client.chat.completions.create(
@@ -73,3 +102,23 @@ async def generate_sphere(request: GenerateRequest):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+# StripeプランアップグレードAPI（差額決済ロジック）
+@app.post("/api/upgrade")
+async def upgrade_subscription(req: UpgradeRequest):
+    try:
+        subscription = stripe.Subscription.retrieve(req.subscription_id)
+        
+        # 現在のサブスクリプションのアイテムIDを取得し、プロプランへ即時変更
+        updated_subscription = stripe.Subscription.modify(
+            req.subscription_id,
+            items=[{
+                'id': subscription['items']['data'][0]['id'],
+                'price': PRO_PRICE_ID,
+            }],
+            proration_behavior='always_invoice', # 即座に差額を計算し請求書を発行
+            billing_cycle_anchor='now',          # 請求サイクルを今日から再スタート
+        )
+        return {"status": "success", "subscription_status": updated_subscription['status']}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
