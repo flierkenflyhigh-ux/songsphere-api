@@ -3,8 +3,6 @@ import json
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-import spotipy
-from spotipy.oauth2 import SpotifyClientCredentials
 from openai import AsyncOpenAI
 
 app = FastAPI(title="Songsphere API")
@@ -17,8 +15,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# 変更点：Spotify IDではなく、直接「曲名」と「アーティスト名」を受け取る
 class GenerateRequest(BaseModel):
-    track_id: str
+    track_name: str
+    artist_name: str
 
 async def generate_critique_and_params(track_name: str, artist_name: str):
     """OpenAI APIを使用して、楽曲の推測パラメータ・批評・視覚プロンプトを一括生成する"""
@@ -59,43 +59,18 @@ async def generate_sphere_image(prompt: str):
 @app.post("/generate")
 async def generate_sphere(req: GenerateRequest):
     try:
-        # Spotifyの初期化
-        client_id = os.environ.get("SPOTIFY_CLIENT_ID")
-        client_secret = os.environ.get("SPOTIFY_CLIENT_SECRET")
-        
-        if not client_id or not client_secret:
-            raise HTTPException(status_code=500, detail="Spotify API keys are missing.")
-
-        sp = spotipy.Spotify(auth_manager=SpotifyClientCredentials(
-            client_id=client_id,
-            client_secret=client_secret
-        ))
-        
-        # 1. audio-features の代わりに、通常のトラック情報を取得（これはブロックされない）
-        try:
-            track_info = sp.track(req.track_id)
-            track_name = track_info['name']
-            artist_name = track_info['artists'][0]['name']
-        except Exception as e:
-            raise HTTPException(status_code=404, detail=f"Track ID {req.track_id} not found on Spotify. Error: {str(e)}")
-        
-        # 2. GPT-4oに楽曲情報を渡し、パラメータと批評を一括生成
-        ai_data = await generate_critique_and_params(track_name, artist_name)
-        
-        # 3. 画像の生成
+        # Spotifyの処理を全カットし、直接AIエンジンにデータを渡す
+        ai_data = await generate_critique_and_params(req.track_name, req.artist_name)
         image_url = await generate_sphere_image(ai_data["visual_prompt"])
         
         return {
             "status": "success",
-            "track_name": track_name,
-            "artist_name": artist_name,
+            "track_name": req.track_name,
+            "artist_name": req.artist_name,
             "params": ai_data["physics_params"],
             "critique": ai_data["critique"],
             "image_url": image_url
         }
-        
-    except spotipy.exceptions.SpotifyException as e:
-        raise HTTPException(status_code=e.http_status, detail=f"Spotify API Error: {e.msg}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
