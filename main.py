@@ -1,5 +1,6 @@
 import os
 import json
+import httpx
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -19,10 +20,21 @@ class GenerateRequest(BaseModel):
     track_name: str
     artist_name: str
 
-async def generate_critique_and_params(track_name: str, artist_name: str):
-    """OpenAI APIを使用して、楽曲の推測パラメータ・批評を一括生成する"""
-    client = AsyncOpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+# 新規追加：iTunes APIへの検索を中継するエンドポイント
+@app.get("/search")
+async def search_track(query: str):
+    if not query:
+        raise HTTPException(status_code=400, detail="Query is required")
     
+    url = f"https://itunes.apple.com/search?term={query}&entity=song&limit=5&country=JP"
+    async with httpx.AsyncClient() as client:
+        response = await client.get(url)
+        if response.status_code != 200:
+            raise HTTPException(status_code=response.status_code, detail="Failed to fetch from iTunes")
+        return response.json()
+
+async def generate_critique_and_params(track_name: str, artist_name: str):
+    client = AsyncOpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
     prompt = f"""
     You are a poetic music critic and visual artist.
     Analyze the song "{track_name}" by {artist_name}.
@@ -32,7 +44,6 @@ async def generate_critique_and_params(track_name: str, artist_name: str):
     - "physics_params": A dictionary containing "color_intensity" (float 0.0-1.0), "rotation_speed" (float 0.0-2.0), and "turbulence" (float 0.0-1.0).
     - "critique": A short poetic critique of the song.
     """
-    
     response = await client.chat.completions.create(
         model="gpt-4o",
         response_format={ "type": "json_object" },
@@ -46,9 +57,7 @@ async def generate_critique_and_params(track_name: str, artist_name: str):
 @app.post("/generate")
 async def generate_sphere(req: GenerateRequest):
     try:
-        # GPT-4oによるパラメータと批評の生成のみを実行
         ai_data = await generate_critique_and_params(req.track_name, req.artist_name)
-        
         return {
             "status": "success",
             "track_name": req.track_name,
