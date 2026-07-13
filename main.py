@@ -15,7 +15,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 変更点：Spotify IDではなく、直接「曲名」と「アーティスト名」を受け取る
 class GenerateRequest(BaseModel):
     track_name: str
     artist_name: str
@@ -46,10 +45,10 @@ async def generate_critique_and_params(track_name: str, artist_name: str):
     return json.loads(response.choices[0].message.content)
 
 async def generate_sphere_image(prompt: str):
-    """DALL-E 3 を使用して球体の画像を生成する"""
+    """DALL-E 2 を使用して球体の画像を生成する"""  # ★ここ！コメントを修正
     client = AsyncOpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
     response = await client.images.generate(
-        model="dall-e-3",
+        model="dall-e-2",  # ★ここ！モデル名を dall-e-2 に変更
         prompt=f"Abstract 3D spherical art based on: {prompt}, high quality, cinematic lighting, 8k",
         n=1,
         size="1024x1024"
