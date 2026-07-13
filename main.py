@@ -12,6 +12,8 @@ import numpy as np
 from openai import AsyncOpenAI
 from pydantic import BaseModel
 
+app = FastAPI(title="Songsphere API")
+
 # 1. リクエストの受け取り形式を定義（422エラーの解消）
 class GenerateRequest(BaseModel):
     track_id: str
@@ -50,7 +52,7 @@ async def generate_sphere(req: GenerateRequest):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-app = FastAPI(title="Songsphere API")
+
 
 # CORS設定（Vercelからの通信を許可）
 app.add_middleware(
