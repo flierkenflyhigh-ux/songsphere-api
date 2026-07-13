@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+                              <meta charset="UTF-8">
+                              <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                              <title>Songsphere - 音楽を球体に</title>
+                              <style>
+                                                            body {
+                                                                                          font-family: sans-serif;
+                                                                                          padding: 20px;
+                                                                                          background-color: #f4f4f9;
+                                                            }
+
+                                                            input {
+                                                                                          padding: 8px;
+                                                                                          width: 300px;
+                                                                                          font-size: 16px;
+                                                            }
+
+                                                            button {
+                                                                                          padding: 8px 16px;
+                                                                                          font-size: 16px;
+                                                                                          cursor: pointer;
+                                                            }
+
+                                                            ul {
+                                                                                          list-style-type: none;
+                                                                                          padding: 0;
+                                                            }
+
+                                                            li {
+                                                                                          background: white;
+                                                                                          margin: 5px 0;
+                                                                                          padding: 10px;
+                                                                                          border-radius: 5px;
+                                                                                          cursor: pointer;
+                                                                                          border: 1px solid #ccc;
+                                                            }
+
+                                                            li:hover {
+                                                                                          background: #e9e9e9;
+                                                            }
+
+                                                            #resultArea {
+                                                                                          margin-top: 20px;
+                                                                                          padding: 15px;
+                                                                                          background: white;
+                                                                                          border-radius: 5px;
+                                                                                          border: 1px solid #ccc;
+                                                                                          display: none;
+                                                            }
+                              </style>
+</head>
+
+<body>
+
+                              <h1>Songsphere</h1>
+                              <p>曲名やアーティスト名で検索して、球体のパラメータを生成します。</p>
+
+                              <!-- 検索ボックス -->
+                              <div>
+                                                            <input type="text" id="searchInput"
+                                                                                          placeholder="例: Bohemian Rhapsody Queen">
+                                                            <button onclick="searchItunes()">検索</button>
+                              </div>
+
+                              <!-- 検索結果リスト -->
+                              <ul id="resultsList"></ul>
+
+                              <!-- 生成結果の表示エリア -->
+                              <div id="resultArea">
+                                                            <h3>生成完了！</h3>
+                                                            <p><strong>選択した曲:</strong> <span id="selectedSong"></span>
+                                                            </p>
+                                                            <p><strong>物理パラメータ:</strong> <span id="paramsData"></span>
+                                                            </p>
+                                                            <p><strong>AIの批評:</strong></p>
+                                                            <blockquote id="critiqueData"
+                                                                                          style="font-style: italic; color: #555;">
+                                                            </blockquote>
+                              </div>
+
+                              <script>
+                                                            // 1. iTunes APIで楽曲を検索する
+                                                            async function searchItunes() {
+                                                                                          const query = document.getElementById('searchInput').value;
+                                                                                          if (!query) return;
+
+                                                                                          const list = document.getElementById('resultsList');
+                                                                                          list.innerHTML = '<li>検索中...</li>';
+                                                                                          document.getElementById('resultArea').style.display = 'none';
+
+                                                                                          const url = `https://itunes.apple.com/search?term=${encodeURIComponent(query)}&entity=song&limit=5&country=JP`;
+
+                                                                                          try {
+                                                                                                                        const response = await fetch(url);
+                                                                                                                        const data = await response.json();
+
+                                                                                                                        list.innerHTML = ''; // 検索中...の文字を消す
+
+                                                                                                                        if (data.results.length === 0) {
+                                                                                                                                                      list.innerHTML = '<li>見つかりませんでした。</li>';
+                                                                                                                                                      return;
+                                                                                                                        }
+
+                                                                                                                        // 検索結果をリストに追加
+                                                                                                                        data.results.forEach(track => {
+                                                                                                                                                      const li = document.createElement('li');
+                                                                                                                                                      li.textContent = `${track.trackName} - ${track.artistName}`;
+                                                                                                                                                      li.onclick = () => generateSphere(track.trackName, track.artistName);
+                                                                                                                                                      list.appendChild(li);
+                                                                                                                        });
+                                                                                          } catch (error) {
+                                                                                                                        console.error("検索エラー:", error);
+                                                                                                                        list.innerHTML = '<li>エラーが発生しました。</li>';
+                                                                                          }
+                                                            }
+
+                                                            // 2. RenderのバックエンドAPIを呼び出す
+                                                            async function generateSphere(trackName, artistName) {
+                                                                                          const list = document.getElementById('resultsList');
+                                                                                          list.innerHTML = `<li>「${trackName}」のパラメータを生成中... (数秒かかります)</li>`;
+
+                                                                                          try {
+                                                                                                                        const response = await fetch("https://songspere-api.onrender.com/generate", {
+                                                                                                                                                      method: "POST",
+                                                                                                                                                      headers: {
+                                                                                                                                                                                    "Content-Type": "application/json"
+                                                                                                                                                      },
+                                                                                                                                                      body: JSON.stringify({
+                                                                                                                                                                                    track_name: trackName,
+                                                                                                                                                                                    artist_name: artistName
+                                                                                                                                                      })
+                                                                                                                        });
+
+                                                                                                                        const result = await response.json();
+
+                                                                                                                        // 3. 画面に結果を表示する
+                                                                                                                        list.innerHTML = '';
+                                                                                                                        document.getElementById('resultArea').style.display = 'block';
+                                                                                                                        document.getElementById('selectedSong').textContent = `${result.track_name} by ${result.artist_name}`;
+                                                                                                                        document.getElementById('paramsData').textContent = JSON.stringify(result.params);
+                                                                                                                        document.getElementById('critiqueData').textContent = result.critique;
+
+                                                                                                                        console.log("取得したパラメータ:", result.params);
+                                                                                                                        // ※ 将来的には、ここで params を使って 3Dの球体を描画する処理（Three.jsなど）を呼び出します
+
+                                                                                          } catch (error) {
+                                                                                                                        console.error("生成エラー:", error);
+                                                                                                                        list.innerHTML = '<li>APIの呼び出しに失敗しました。</li>';
+                                                                                          }
+                                                            }
+                              </script>
+</body>
+
+</html>
