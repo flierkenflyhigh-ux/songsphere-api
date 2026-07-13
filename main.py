@@ -10,7 +10,46 @@ import spotipy
 from spotipy.oauth2 import SpotifyClientCredentials
 import numpy as np
 from openai import AsyncOpenAI
+from pydantic import BaseModel
 
+# 1. リクエストの受け取り形式を定義（422エラーの解消）
+class GenerateRequest(BaseModel):
+    track_id: str
+
+# 2. 画像生成関数を追加
+async def generate_sphere_image(prompt):
+    client = AsyncOpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+    response = await client.images.generate(
+        model="dall-e-3",
+        prompt=f"Abstract 3D spherical art based on: {prompt}, high quality, cinematic lighting, 8k",
+        n=1,
+        size="1024x1024"
+    )
+    return response.data[0].url
+
+# 3. エンドポイントの統合
+@app.post("/generate")
+async def generate_sphere(req: GenerateRequest):
+    try:
+        # Spotifyデータの取得
+        features = sp.audio_features(req.track_id)[0]
+        analysis = sp.audio_analysis(req.track_id)
+        params = calculate_physics_params(features, analysis)
+        
+        # アルバム文脈と批評の生成
+        critique_data = await generate_critique(req.track_id, params)
+        
+        # 画像の生成
+        image_url = await generate_sphere_image(critique_data["visual_prompt"])
+        
+        return {
+            "status": "success",
+            "params": params,
+            "critique": critique_data["critique"],
+            "image_url": image_url
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 app = FastAPI(title="Songsphere API")
 
 # CORS設定（Vercelからの通信を許可）
