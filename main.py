@@ -122,3 +122,42 @@ async def upgrade_subscription(req: UpgradeRequest):
         return {"status": "success", "subscription_status": updated_subscription['status']}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+# --- 音楽的物理パラメータ変換関数 ---
+def calculate_physics_params(audio_features, audio_analysis):
+    # 1. Rhythmic_Friction
+    friction = audio_features['energy'] * (1 - audio_features['danceability']) * 100
+    
+    # 2. Instrument_Role_Contrast
+    contrast = (1 - audio_features['instrumentalness']) * 100
+    
+    # 3. Dynamic_Shift (Loudnessの標準偏差から計算)
+    segments = audio_analysis.get('segments', [])
+    loudness_values = [seg['loudness_start'] for seg in segments]
+    dynamic_shift = np.std(loudness_values) * 10  # W=10で正規化
+    
+    # 4. Vocal_Organic_Index
+    organic = ((audio_features['acousticness'] + audio_features['speechiness']) / 2) * 100
+    
+    return {
+        "rhythmic_friction": round(friction, 2),
+        "instrument_role_contrast": round(contrast, 2),
+        "dynamic_shift": round(dynamic_shift, 2),
+        "vocal_organic_index": round(organic, 2)
+    }
+
+# --- エンドポイント実装 ---
+@app.post("/generate")
+async def generate_sphere(req: GenerateRequest):
+    try:
+        # Spotifyデータの取得
+        features = sp.audio_features(req.track_id)[0]
+        analysis = sp.audio_analysis(req.track_id)
+        
+        # 独自パラメータ計算
+        params = calculate_physics_params(features, analysis)
+        
+        # ここでLLM(OpenAI)を呼び出し、パラメータとアルバム文脈を解析させる
+        # 処理を続行...
+        return {"status": "success", "params": params}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
