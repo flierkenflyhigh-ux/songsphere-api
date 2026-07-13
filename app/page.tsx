@@ -1,65 +1,105 @@
-import Image from "next/image";
+"use client";
+
+import { useState } from "react";
+import Logo from "../components/Logo";
 
 export default function Home() {
+  const [searchQuery, setSearchQuery] = useState("");
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [selectedTrack, setSelectedTrack] = useState<any | null>(null);
+  const [isGenerating, setIsGenerating] = useState(false);
+
+  const handleSearch = async () => {
+    if (!searchQuery) return;
+    setIsSearching(true);
+    setSelectedTrack(null);
+
+    try {
+      const response = await fetch(`/api/spotify/search?q=${encodeURIComponent(searchQuery)}`);
+      if (!response.ok) throw new Error("APIリクエストに失敗しました");
+
+      const data = await response.json();
+      setSearchResults(data.tracks || []);
+    } catch (error) {
+      console.error("検索エラー:", error);
+      alert("検索中にエラーが発生しました。");
+      setSearchResults([]);
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  const handleGenerate = async () => {
+    if (!selectedTrack) return;
+    setIsGenerating(true);
+
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+    alert(`【システムテスト完了】\n選択曲: ${selectedTrack.name} (${selectedTrack.artist})\n※次のステップで、この曲のAudio Features（音響特徴データ）を取得します。`);
+
+    setIsGenerating(false);
+  };
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <main className="min-h-screen flex flex-col items-center justify-center p-4">
+      <div className="relative w-full max-w-md p-10 rounded-[2rem] bg-white/5 backdrop-blur-xl border border-white/10 shadow-2xl flex flex-col items-center">
+
+        {/* 【改修】検索中(isSearching) または 生成中(isGenerating) の時に active=true を送信 */}
+        <div className="w-40 h-40 mb-6 drop-shadow-2xl">
+          <Logo active={isSearching || isGenerating} />
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
+
+        <h1 className="text-4xl font-bold mb-3 tracking-wider bg-clip-text text-transparent bg-gradient-to-r from-purple-400 to-indigo-300">
+          Songsphere
+        </h1>
+        <p className="text-white/60 text-sm mb-8 text-center leading-relaxed">
+          楽曲の音響データを解析し、<br />音楽の結晶を生成します。
+        </p>
+
+        <div className="w-full space-y-4">
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="曲名やアーティスト名を入力"
+              className="flex-1 bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-white/30 focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition-all text-sm disabled:opacity-50"
+              disabled={isSearching || isGenerating}
             />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+            <button
+              onClick={handleSearch}
+              disabled={!searchQuery || isSearching || isGenerating}
+              className="bg-white/10 hover:bg-white/20 border border-white/10 rounded-xl px-4 py-3 font-bold text-white transition-all active:scale-[0.95] disabled:opacity-50 disabled:cursor-not-allowed text-sm whitespace-nowrap"
+            >
+              {isSearching ? "検索中..." : "検索"}
+            </button>
+          </div>
+
+          {searchResults.length > 0 && (
+            <div className="w-full bg-black/60 border border-white/10 rounded-xl overflow-hidden mt-2">
+              {searchResults.map((track) => (
+                <button
+                  key={track.id}
+                  onClick={() => setSelectedTrack(track)}
+                  className={`w-full text-left px-4 py-3 border-b border-white/5 last:border-b-0 hover:bg-white/10 transition-colors ${selectedTrack?.id === track.id ? 'bg-purple-500/30' : ''}`}
+                >
+                  <div className="text-white text-sm font-bold truncate">{track.name}</div>
+                  <div className="text-white/50 text-xs truncate">{track.artist}</div>
+                </button>
+              ))}
+            </div>
+          )}
+
+          <button
+            onClick={handleGenerate}
+            disabled={!selectedTrack || isGenerating}
+            className="w-full mt-4 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 disabled:from-purple-800 disabled:to-indigo-800 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl px-5 py-4 font-bold text-white shadow-lg shadow-purple-500/25 transition-all active:scale-[0.98]"
           >
-            Documentation
-          </a>
+            {isGenerating ? "スフィアを生成中..." : selectedTrack ? "この曲でスフィアを生成" : "曲を選択してください"}
+          </button>
         </div>
-      </main>
-    </div>
+
+      </div>
+    </main>
   );
 }

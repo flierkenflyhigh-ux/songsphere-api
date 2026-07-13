@@ -6,3 +6,4 @@ openai
 tenacity
 stripe
 psycopg2-binary
+httpx
