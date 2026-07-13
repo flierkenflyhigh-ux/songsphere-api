@@ -161,3 +161,56 @@ async def generate_sphere(req: GenerateRequest):
         return {"status": "success", "params": params}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+# --- 追加: LLM連携とアルバム文脈解析 ---
+async def generate_critique(track_id, params):
+    # 楽曲とアルバム情報の取得
+    track = sp.track(track_id)
+    album = sp.album(track['album']['id'])
+    track_name = track['name']
+    album_name = album['name']
+    
+    # プロンプトの組み立て（アルバム文脈を強調）
+    prompt = f"""
+    楽曲「{track_name}」 (アルバム: {album_name}) を分析してください。
+    【物理パラメータ】: {params}
+    
+    【依頼事項】:
+    1. アルバム全体が持つテーマと、その中でこの曲が占める役割を深層分析し、3つの要点で音楽的洞察を出力してください。
+    2. アルバムの文脈を加味した上で、この楽曲を「丸い球体（マテリアル・スフィア）」として可視化するためのプロンプトを生成してください。
+    
+    【出力形式】: JSON
+    {{
+        "critique": ["要点1", "要点2", "要点3"],
+        "visual_prompt": "球体の材質や光沢、テクスチャを物理パラメータに基づいて詳細に記述"
+    }}
+    """
+    
+    # OpenAI API呼び出し
+    client = AsyncOpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+    response = await client.chat.completions.create(
+        model="gpt-4o",
+        messages=[{"role": "user", "content": prompt}],
+        response_format={ "type": "json_object" }
+    )
+    return json.loads(response.choices[0].message.content)
+
+# --- 更新: エンドポイントを非同期に修正 ---
+@app.post("/generate")
+async def generate_sphere(req: GenerateRequest):
+    try:
+        # Spotifyデータの取得
+        features = sp.audio_features(req.track_id)[0]
+        analysis = sp.audio_analysis(req.track_id)
+        params = calculate_physics_params(features, analysis)
+        
+        # LLMによる批評とプロンプト生成
+        result = await generate_critique(req.track_id, params)
+        
+        return {
+            "status": "success",
+            "params": params,
+            "critique": result["critique"],
+            "visual_prompt": result["visual_prompt"]
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
