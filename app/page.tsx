@@ -16,11 +16,18 @@ export default function Home() {
     setSelectedTrack(null);
 
     try {
-      const response = await fetch(`/api/spotify/search?q=${encodeURIComponent(searchQuery)}`);
+      // 【修正箇所】Vercel内部の相対パスから、Renderの本番APIへの絶対パスに変更
+      // ※もしRenderのURLスペルが本当に "songspere"（h抜け）であれば、適宜 'h' を抜いてください。
+      const response = await fetch(`https://songsphere-api.onrender.com/search?q=${encodeURIComponent(searchQuery)}`);
+
       if (!response.ok) throw new Error("APIリクエストに失敗しました");
 
       const data = await response.json();
-      setSearchResults(data.tracks || []);
+
+      // バックエンドのレスポンス形式（Spotify/iTunesなど）の違いを吸収して配列を取得
+      const tracks = data.tracks || data.results || data || [];
+      setSearchResults(Array.isArray(tracks) ? tracks : []);
+
     } catch (error) {
       console.error("検索エラー:", error);
       alert("検索中にエラーが発生しました。");
@@ -35,7 +42,12 @@ export default function Home() {
     setIsGenerating(true);
 
     await new Promise((resolve) => setTimeout(resolve, 2000));
-    alert(`【システムテスト完了】\n選択曲: ${selectedTrack.name} (${selectedTrack.artist})\n※次のステップで、この曲のAudio Features（音響特徴データ）を取得します。`);
+
+    // データ構造の違いを吸収して曲名とアーティスト名を表示
+    const trackName = selectedTrack.name || selectedTrack.trackName;
+    const artistName = selectedTrack.artist || selectedTrack.artistName;
+
+    alert(`【システムテスト完了】\n選択曲: ${trackName} (${artistName})\n※次のステップで、この曲のAudio Features（音響特徴データ）を取得します。`);
 
     setIsGenerating(false);
   };
@@ -44,7 +56,6 @@ export default function Home() {
     <main className="min-h-screen flex flex-col items-center justify-center p-4">
       <div className="relative w-full max-w-md p-10 rounded-[2rem] bg-white/5 backdrop-blur-xl border border-white/10 shadow-2xl flex flex-col items-center">
 
-        {/* 【改修】検索中(isSearching) または 生成中(isGenerating) の時に active=true を送信 */}
         <div className="w-40 h-40 mb-6 drop-shadow-2xl">
           <Logo active={isSearching || isGenerating} />
         </div>
@@ -77,16 +88,29 @@ export default function Home() {
 
           {searchResults.length > 0 && (
             <div className="w-full bg-black/60 border border-white/10 rounded-xl overflow-hidden mt-2">
-              {searchResults.map((track) => (
-                <button
-                  key={track.id}
-                  onClick={() => setSelectedTrack(track)}
-                  className={`w-full text-left px-4 py-3 border-b border-white/5 last:border-b-0 hover:bg-white/10 transition-colors ${selectedTrack?.id === track.id ? 'bg-purple-500/30' : ''}`}
-                >
-                  <div className="text-white text-sm font-bold truncate">{track.name}</div>
-                  <div className="text-white/50 text-xs truncate">{track.artist}</div>
-                </button>
-              ))}
+              {searchResults.map((track, index) => {
+                // APIによるキーの違い（id/trackId, name/trackName）を吸収
+                const trackId = track.id || track.trackId || index;
+                const trackName = track.name || track.trackName || "不明な曲名";
+                const artistName = track.artist || track.artistName || "不明なアーティスト";
+
+                // 現在選択されている曲かどうかを判定
+                const isSelected = selectedTrack && (
+                  (selectedTrack.id && selectedTrack.id === trackId) ||
+                  (selectedTrack.trackId && selectedTrack.trackId === trackId)
+                );
+
+                return (
+                  <button
+                    key={trackId}
+                    onClick={() => setSelectedTrack(track)}
+                    className={`w-full text-left px-4 py-3 border-b border-white/5 last:border-b-0 hover:bg-white/10 transition-colors ${isSelected ? 'bg-purple-500/30' : ''}`}
+                  >
+                    <div className="text-white text-sm font-bold truncate">{trackName}</div>
+                    <div className="text-white/50 text-xs truncate">{artistName}</div>
+                  </button>
+                )
+              })}
             </div>
           )}
 
