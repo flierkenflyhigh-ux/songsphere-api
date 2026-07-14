@@ -1,73 +1,59 @@
-import os
-import json
-import httpx
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-from openai import AsyncOpenAI
+import requests
 
-app = FastAPI(title="Songsphere API")
+app = FastAPI()
 
+# 1. CORS設定：Vercel（フロントエンド）からの通信を明示的に許可する
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "http://localhost:3000",
+        "https://songsphere-api-zkcl.vercel.app"  # 実際のVercelのURL
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-class GenerateRequest(BaseModel):
-    track_name: str
-    artist_name: str
-
-# 新規追加：iTunes APIへの検索を中継するエンドポイント
+# 2. iTunes APIへの接続とデータ取得（検索機能）
 @app.get("/search")
-async def search_track(query: str):
-    if not query:
-        raise HTTPException(status_code=400, detail="Query is required")
-    
-    url = f"https://itunes.apple.com/search?term={query}&entity=song&limit=5&country=JP"
-    async with httpx.AsyncClient() as client:
-        response = await client.get(url)
-        if response.status_code != 200:
-            raise HTTPException(status_code=response.status_code, detail="Failed to fetch from iTunes")
-        return response.json()
+def search_tracks(q: str):
+    if not q:
+        raise HTTPException(status_code=400, detail="Search query 'q' is required")
 
-async def generate_critique_and_params(track_name: str, artist_name: str):
-    client = AsyncOpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
-    prompt = f"""
-    You are a poetic music critic and visual artist.
-    Analyze the song "{track_name}" by {artist_name}.
-    Based on your knowledge of this song's sonic profile (tempo, energy, valence), generate physics parameters for an abstract 3D spherical art concept.
-    
-    Output strictly in JSON format with the following keys:
-    - "physics_params": A dictionary containing "color_intensity" (float 0.0-1.0), "rotation_speed" (float 0.0-2.0), and "turbulence" (float 0.0-1.0).
-    - "critique": A short poetic critique of the song.
-    """
-    response = await client.chat.completions.create(
-        model="gpt-4o",
-        response_format={ "type": "json_object" },
-        messages=[
-            {"role": "system", "content": "You are a creative API that outputs only valid JSON."},
-            {"role": "user", "content": prompt}
-        ]
-    )
-    return json.loads(response.choices[0].message.content)
+    # iTunes APIの公式エンドポイント
+    itunes_url = "https://itunes.apple.com/search"
+    params = {
+        "term": q,
+        "entity": "song",
+        "limit": 10,       # 取得件数
+        "country": "JP"    # 日本のストアを対象
+    }
 
-@app.post("/generate")
-async def generate_sphere(req: GenerateRequest):
     try:
-        ai_data = await generate_critique_and_params(req.track_name, req.artist_name)
-        return {
-            "status": "success",
-            "track_name": req.track_name,
-            "artist_name": req.artist_name,
-            "params": ai_data["physics_params"],
-            "critique": ai_data["critique"]
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        # iTunes APIへ実際にリクエストを送信
+        response = requests.get(itunes_url, params=params)
+        response.raise_for_status()
+        data = response.json()
 
-@app.get("/health")
-def health_check():
-    return {"status": "ok"}
+        # 3. フロントエンドが要求するデータ構造（id, name, artist）に合わせて整形
+        formatted_tracks = []
+        for item in data.get("results", []):
+            formatted_tracks.append({
+                "id": str(item.get("trackId", "")),
+                "name": item.get("trackName", "Unknown Track"),
+                "artist": item.get("artistName", "Unknown Artist")
+            })
+
+        # フロントエンドに返す
+        return {"tracks": formatted_tracks}
+
+    except Exception as e:
+        print(f"Error fetching from iTunes: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch data from iTunes API")
+
+# 稼働確認用のルートエンドポイント
+@app.get("/")
+def root():
+    return {"status": "ok", "message": "Songsphere API is successfully running on Render!"}

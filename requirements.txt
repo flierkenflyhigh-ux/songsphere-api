@@ -7,3 +7,4 @@ tenacity
 stripe
 psycopg2-binary
 httpx
+requests
