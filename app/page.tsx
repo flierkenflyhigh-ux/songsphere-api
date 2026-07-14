@@ -16,15 +16,14 @@ export default function Home() {
     setSelectedTrack(null);
 
     try {
-      // 【修正箇所】Vercel内部の相対パスから、Renderの本番APIへの絶対パスに変更
-      // ※もしRenderのURLスペルが本当に "songspere"（h抜け）であれば、適宜 'h' を抜いてください。
-      const response = await fetch(`https://songsphere-api.onrender.com/search?q=${encodeURIComponent(searchQuery)}`);
+      // 【完全修正箇所】URLのスペルミス（h抜け）をあなたのRender URLに正確に合致させました
+      const response = await fetch(`https://songspere-api.onrender.com/search?q=${encodeURIComponent(searchQuery)}`);
 
       if (!response.ok) throw new Error("APIリクエストに失敗しました");
 
       const data = await response.json();
 
-      // バックエンドのレスポンス形式（Spotify/iTunesなど）の違いを吸収して配列を取得
+      // バックエンドのレスポンス形式の違いを吸収して配列を取得
       const tracks = data.tracks || data.results || data || [];
       setSearchResults(Array.isArray(tracks) ? tracks : []);
 
@@ -89,7 +88,7 @@ export default function Home() {
           {searchResults.length > 0 && (
             <div className="w-full bg-black/60 border border-white/10 rounded-xl overflow-hidden mt-2">
               {searchResults.map((track, index) => {
-                // APIによるキーの違い（id/trackId, name/trackName）を吸収
+                // APIによるキーの違いを吸収
                 const trackId = track.id || track.trackId || index;
                 const trackName = track.name || track.trackName || "不明な曲名";
                 const artistName = track.artist || track.artistName || "不明なアーティスト";
