@@ -1,7 +1,41 @@
-export default function Logo({ active = false }: { active?: boolean }) {
-                              // 普段の自転アニメーション（検索中もゆっくり回し続けることで、ベースの空間を維持する）
+"use client";
+
+// パラメータの型定義
+export interface SphereParameters {
+                              color_main?: string;
+                              color_sub?: string;
+                              speed?: number;       // 0.0 ~ 1.0
+                              distortion?: number;  // 0.0 ~ 1.0
+                              size_shift?: number;  // 0.0 ~ 1.0
+}
+
+interface LogoProps {
+                              active?: boolean;
+                              parameters?: SphereParameters | null;
+}
+
+export default function Logo({ active = false, parameters = null }: LogoProps) {
                               const planetSpinClass = "animate-planet-spin-slow";
-                              const hueShiftClass = "animate-hue-shift-slow";
+                              const hueShiftClass = parameters ? "" : "animate-hue-shift-slow"; // パラメータがある時は色を固定するためhue-shiftを外す
+
+                              // --- パラメータに基づく動的スタイルの計算 ---
+
+                              // デフォルト色（未生成時）
+                              const cMain = parameters?.color_main || "#7e22ce";
+                              const cSub1 = parameters?.color_sub || "#ec4899";
+                              const cSub2 = parameters ? parameters.color_main : "#3b82f6"; // 生成時はメインカラーとサブカラーのグラデーションにする
+
+                              // 速度の計算（1.0が最速、0.0が最遅。デフォルトは0.5）
+                              const speedNormalized = parameters?.speed !== undefined ? parameters.speed : 0.5;
+                              // CSSのanimation-duration（秒）に変換。値が大きいほどdurationを短く（速く）する
+                              const mixSpeed1 = 14 - (speedNormalized * 10); // 4s ~ 14s
+                              const mixSpeed2 = 18 - (speedNormalized * 12); // 6s ~ 18s
+                              const mixSpeed3 = 20 - (speedNormalized * 14); // 6s ~ 20s
+
+                              // 激しさ（波打ち/ノイズ）の計算。フィルターのぼかし具合と、移動距離に影響
+                              const distortionNormalized = parameters?.distortion !== undefined ? parameters.distortion : 0.5;
+                              const blurAmount = 18 - (distortionNormalized * 10); // 8 ~ 18 (低いほど境界がくっきりして激しく見える)
+                              const scaleAmount = 1.0 + (distortionNormalized * 0.8); // 1.0 ~ 1.8
 
                               return (
                                                             <svg width="100%" height="100%" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
@@ -10,7 +44,7 @@ export default function Logo({ active = false }: { active?: boolean }) {
                                                                                                                                                       <circle cx="100" cy="100" r="75" fill="#ffffff" />
                                                                                                                         </mask>
                                                                                                                         <filter id="cloudBlur" x="-50%" y="-50%" width="200%" height="200%">
-                                                                                                                                                      <feGaussianBlur stdDeviation="18" />
+                                                                                                                                                      <feGaussianBlur stdDeviation={blurAmount} />
                                                                                                                         </filter>
                                                                                                                         <clipPath id="backHalf">
                                                                                                                                                       <rect x="0" y="0" width="200" height="100" />
@@ -53,24 +87,24 @@ export default function Logo({ active = false }: { active?: boolean }) {
               100% { filter: hue-rotate(360deg); }
             }
 
-            /* 普段の雲の混ざり合い */
-            .animate-cloud-mix-1 { animation: cloudMix1 7s ease-in-out infinite alternate; }
-            .animate-cloud-mix-2 { animation: cloudMix2 11s ease-in-out infinite alternate; }
-            .animate-cloud-mix-3 { animation: cloudMix3 13s ease-in-out infinite alternate; }
+            /* 動的パラメータを適用した雲のアニメーション */
+            .animate-cloud-mix-1 { animation: cloudMix1 ${mixSpeed1}s ease-in-out infinite alternate; }
+            .animate-cloud-mix-2 { animation: cloudMix2 ${mixSpeed2}s ease-in-out infinite alternate; }
+            .animate-cloud-mix-3 { animation: cloudMix3 ${mixSpeed3}s ease-in-out infinite alternate; }
+            
             @keyframes cloudMix1 {
               0% { transform: translateY(-15px) scale(0.9); }
-              100% { transform: translateY(20px) scale(1.3); }
+              100% { transform: translateY(20px) scale(${scaleAmount}); }
             }
             @keyframes cloudMix2 {
-              0% { transform: translateY(25px) scale(1.2); }
+              0% { transform: translateY(25px) scale(${scaleAmount - 0.1}); }
               100% { transform: translateY(-15px) scale(0.8); }
             }
             @keyframes cloudMix3 {
               0% { transform: translateY(-10px) scale(1); }
-              100% { transform: translateY(15px) scale(1.4); }
+              100% { transform: translateY(15px) scale(${scaleAmount + 0.1}); }
             }
 
-            /* 【新規追加】裏側から湧き上がる新しい雲のZ軸アニメーション */
             .animate-surge-1 { transform-origin: 100px 100px; animation: surge 3s ease-in-out infinite; }
             .animate-surge-2 { transform-origin: 100px 100px; animation: surge 4s ease-in-out infinite 1.2s; }
             .animate-surge-3 { transform-origin: 100px 100px; animation: surge 3.5s ease-in-out infinite 2.4s; }
@@ -85,7 +119,6 @@ export default function Logo({ active = false }: { active?: boolean }) {
                                                                                                                         </style>
                                                                                           </defs>
 
-                                                                                          {/* --- レイヤー1：奥の軌道 --- */}
                                                                                           <g transform="rotate(-20 100 100)" clipPath="url(#backHalf)">
                                                                                                                         <use href="#outerOrbit" />
                                                                                           </g>
@@ -93,42 +126,39 @@ export default function Logo({ active = false }: { active?: boolean }) {
                                                                                                                         <use href="#innerOrbit" />
                                                                                           </g>
 
-                                                                                          {/* --- レイヤー2：恒星本体とガス --- */}
                                                                                           <circle cx="100" cy="100" r="75" fill="#0f0c29" />
 
                                                                                           <g mask="url(#sphereMask)">
-                                                                                                                        {/* 1. 普段の雲（検索中はスーッと暗転し、奥の宇宙空間を見せる） */}
-                                                                                                                        <g style={{ opacity: active ? 0.2 : 1, transition: 'opacity 1s ease-in-out' }}>
+                                                                                                                        {/* 1. 生成完了後のスフィア、またはデフォルトの雲 */}
+                                                                                                                        <g style={{ opacity: active && !parameters ? 0.2 : 1, transition: 'opacity 1s ease-in-out' }}>
                                                                                                                                                       <g className={`${planetSpinClass} ${hueShiftClass}`}>
                                                                                                                                                                                     <g>
-                                                                                                                                                                                                                  <circle cx="0" cy="100" r="70" fill="#7e22ce" filter="url(#cloudBlur)" className="animate-cloud-mix-1" />
-                                                                                                                                                                                                                  <circle cx="80" cy="50" r="60" fill="#ec4899" filter="url(#cloudBlur)" className="animate-cloud-mix-2" />
-                                                                                                                                                                                                                  <circle cx="140" cy="150" r="65" fill="#3b82f6" filter="url(#cloudBlur)" className="animate-cloud-mix-3" />
-                                                                                                                                                                                                                  <circle cx="200" cy="100" r="70" fill="#7e22ce" filter="url(#cloudBlur)" className="animate-cloud-mix-1" />
+                                                                                                                                                                                                                  <circle cx="0" cy="100" r="70" fill={cMain} filter="url(#cloudBlur)" className="animate-cloud-mix-1" />
+                                                                                                                                                                                                                  <circle cx="80" cy="50" r="60" fill={cSub1} filter="url(#cloudBlur)" className="animate-cloud-mix-2" />
+                                                                                                                                                                                                                  <circle cx="140" cy="150" r="65" fill={cSub2} filter="url(#cloudBlur)" className="animate-cloud-mix-3" />
+                                                                                                                                                                                                                  <circle cx="200" cy="100" r="70" fill={cMain} filter="url(#cloudBlur)" className="animate-cloud-mix-1" />
                                                                                                                                                                                     </g>
                                                                                                                                                                                     <g transform="translate(200, 0)">
-                                                                                                                                                                                                                  <circle cx="0" cy="100" r="70" fill="#7e22ce" filter="url(#cloudBlur)" className="animate-cloud-mix-1" />
-                                                                                                                                                                                                                  <circle cx="80" cy="50" r="60" fill="#ec4899" filter="url(#cloudBlur)" className="animate-cloud-mix-2" />
-                                                                                                                                                                                                                  <circle cx="140" cy="150" r="65" fill="#3b82f6" filter="url(#cloudBlur)" className="animate-cloud-mix-3" />
-                                                                                                                                                                                                                  <circle cx="200" cy="100" r="70" fill="#7e22ce" filter="url(#cloudBlur)" className="animate-cloud-mix-1" />
+                                                                                                                                                                                                                  <circle cx="0" cy="100" r="70" fill={cMain} filter="url(#cloudBlur)" className="animate-cloud-mix-1" />
+                                                                                                                                                                                                                  <circle cx="80" cy="50" r="60" fill={cSub1} filter="url(#cloudBlur)" className="animate-cloud-mix-2" />
+                                                                                                                                                                                                                  <circle cx="140" cy="150" r="65" fill={cSub2} filter="url(#cloudBlur)" className="animate-cloud-mix-3" />
+                                                                                                                                                                                                                  <circle cx="200" cy="100" r="70" fill={cMain} filter="url(#cloudBlur)" className="animate-cloud-mix-1" />
                                                                                                                                                                                     </g>
                                                                                                                                                       </g>
                                                                                                                         </g>
 
-                                                                                                                        {/* 2. 【新規追加】検索中のみ出現する、裏側から迫り来るデータ雲 */}
-                                                                                                                        <g style={{ opacity: active ? 1 : 0, transition: 'opacity 0.5s ease-in-out' }}>
-                                                                                                                                                      <circle cx="100" cy="120" r="50" fill="#22d3ee" filter="url(#cloudBlur)" className="animate-surge-1" /> {/* シアン（水色） */}
-                                                                                                                                                      <circle cx="80" cy="140" r="60" fill="#a3e635" filter="url(#cloudBlur)" className="animate-surge-2" /> {/* ライムグリーン */}
-                                                                                                                                                      <circle cx="120" cy="130" r="55" fill="#fbbf24" filter="url(#cloudBlur)" className="animate-surge-3" /> {/* ネオンイエロー */}
+                                                                                                                        {/* 2. 検索中/生成中のみ出現する、裏側から迫り来るデータ雲 */}
+                                                                                                                        <g style={{ opacity: active && !parameters ? 1 : 0, transition: 'opacity 0.5s ease-in-out' }}>
+                                                                                                                                                      <circle cx="100" cy="120" r="50" fill="#22d3ee" filter="url(#cloudBlur)" className="animate-surge-1" />
+                                                                                                                                                      <circle cx="80" cy="140" r="60" fill="#a3e635" filter="url(#cloudBlur)" className="animate-surge-2" />
+                                                                                                                                                      <circle cx="120" cy="130" r="55" fill="#fbbf24" filter="url(#cloudBlur)" className="animate-surge-3" />
                                                                                                                         </g>
                                                                                           </g>
 
-                                                                                          {/* ガラスの反射と輪郭線 */}
                                                                                           <ellipse cx="75" cy="45" rx="55" ry="25" fill="#ffffff" opacity="0.2" transform="rotate(-25 75 45)" mask="url(#sphereMask)" />
                                                                                           <path d="M 40 140 Q 100 185 160 140 Q 100 160 40 140 Z" fill="#ffffff" opacity="0.1" mask="url(#sphereMask)" />
                                                                                           <circle cx="100" cy="100" r="74" fill="none" stroke="#ffffff" strokeWidth="1" strokeOpacity="0.15" />
 
-                                                                                          {/* --- レイヤー3：手前の軌道 --- */}
                                                                                           <g transform="rotate(-20 100 100)" clipPath="url(#frontHalf)">
                                                                                                                         <use href="#outerOrbit" />
                                                                                           </g>
