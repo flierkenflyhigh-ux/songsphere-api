@@ -19,8 +19,8 @@ export default function Home() {
     setGeneratedData(null);
 
     try {
-      // ※注意: URLの 'songsphere-api.onrender.com' の部分は、実際のあなたのRenderのURLに合わせて適宜修正してください
-      const response = await fetch(`https://songsphere-api.onrender.com/search?q=${encodeURIComponent(searchQuery)}`);
+      // 本物のRender URL（h抜けスペル）に統合
+      const response = await fetch(`https://songspere-api.onrender.com/search?q=${encodeURIComponent(searchQuery)}`);
       if (!response.ok) throw new Error("APIリクエストに失敗しました");
 
       const data = await response.json();
@@ -45,8 +45,8 @@ export default function Home() {
     const artistName = selectedTrack.artist || selectedTrack.artistName;
 
     try {
-      // ※注意: URLの 'songsphere-api.onrender.com' の部分は、実際のあなたのRenderのURLに合わせて適宜修正してください
-      const response = await fetch("https://songsphere-api.onrender.com/generate", {
+      // 本物のRender URL（h抜けスペル）に統合
+      const response = await fetch("https://songspere-api.onrender.com/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
